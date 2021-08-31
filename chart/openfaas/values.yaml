@@ -1,27 +1,63 @@
 functionNamespace: openfaas-fn  # Default namespace for functions
 
-# See https://www.openfaas.com/support for more
-openfaasPRO: false
-exposeServices: true
 async: true
+
+exposeServices: true
 serviceType: NodePort
 httpProbe: true               # Setting to true will use HTTP for readiness and liveness probe on the OpenFaaS system Pods (incompatible with Istio < 1.1.5)
 rbac: true
 clusterRole: false            # Set to true to have OpenFaaS administrate multiple namespaces
 createCRDs: true
-basic_auth: true
-generateBasicAuth: false
 
-securityContext: true
 # create pod security policies for OpenFaaS control plane
 # https://kubernetes.io/docs/concepts/policy/pod-security-policy/
 psp: false
+securityContext: true
+basic_auth: true
+generateBasicAuth: false
 
 # image pull policy for openfaas components, can change to `IfNotPresent` in offline env
 openfaasImagePullPolicy: "Always"
 
-# openfaasPRO components, which requires openfaasPRO=true
-oidcAuthPlugin:
+gatewayExternal:
+  annotations: {}
+
+gateway:
+  image: clouderizer/faas-gateway:opensource
+  readTimeout : 70m
+  writeTimeout : 70m
+  serverlessurl: "https://test.serverless.clouderizer.com"
+  upstreamTimeout : 70m  # Must be smaller than read/write_timeout
+  replicas: 1
+  scaleFromZero: true
+  # change the port when creating multiple releases in the same baremetal cluster
+  nodePort: 31112
+  maxIdleConns: 1024
+  maxIdleConnsPerHost: 1024
+  directFunctions: true
+  # Custom logs provider url. For example openfaas-loki would be
+  # "http://ofloki-openfaas-loki.openfaas:9191/"
+  logsProviderURL: ""
+  resources:
+    requests:
+      memory: "120Mi"
+      cpu: "50m"
+
+# gateway:
+#   image: clouderizer/faas-gateway:latest
+#   readTimeout: 70m
+#   upstreamTimeout: 70m
+#   writeTimeout: 70m
+
+basicAuthPlugin:
+  image: openfaas/basic-auth-plugin:0.20.1
+  replicas: 1
+  resources:
+    requests:
+      memory: "50Mi"
+      cpu: "20m"
+
+oauth2Plugin:
   enabled: false
   provider: "" # Leave blank, or put "azure"
   license: "example"
@@ -41,56 +77,15 @@ oidcAuthPlugin:
       memory: "120Mi"
       cpu: "50m"
   replicas: 1
-  image: ghcr.io/openfaas/openfaas-oidc-plugin:0.4.1
+  image: openfaas/openfaas-oidc-plugin:0.3.7
   securityContext: true
 
-# Requires openfaasPRO=true
-# scale-to-zero feature
-faasIdler:
-  image: ghcr.io/openfaas/faas-idler-pro:0.4.3
-  replicas: 1
-  create: true
-  inactivityDuration: 30m               # If a function is inactive for 15 minutes, it may be scaled to zero
-  reconcileInterval: 2m                 # The interval between each attempt to scale functions to zero
-  readOnly: true                        # When set to true, no functions are scaled to zero
-  resources:
-    requests:
-      memory: "64Mi"
-
-gateway:
-  image: ghcr.io/openfaas/gateway:0.21.1
-  readTimeout: "65s"
-  writeTimeout: "65s"
-  upstreamTimeout: "60s"  # Must be smaller than read/write_timeout
-  replicas: 1
-  scaleFromZero: true
-  # change the port when creating multiple releases in the same baremetal cluster
-  nodePort: 31112
-  maxIdleConns: 1024
-  maxIdleConnsPerHost: 1024
-  directFunctions: false
-  # Custom logs provider url. For example openfaas-loki would be
-  # "http://ofloki-openfaas-loki.openfaas:9191/"
-  logsProviderURL: ""
-  resources:
-    requests:
-      memory: "120Mi"
-      cpu: "50m"
-
-basicAuthPlugin:
-  image: ghcr.io/openfaas/basic-auth:0.21.1
-  replicas: 1
-  resources:
-    requests:
-      memory: "50Mi"
-      cpu: "20m"
-
 faasnetes:
-  image: ghcr.io/openfaas/faas-netes:0.13.5
-  readTimeout: "60s"
-  writeTimeout: "60s"
-  imagePullPolicy: "Always"    # Image pull policy for deployed functions
-  httpProbe: true               # Setting to true will use HTTP for readiness and liveness probe on Pods (incompatible with Istio < 1.1.5)
+  image: clouderizer/faas-netes:opensource
+  readTimeout : 70m
+  writeTimeout : 70m
+  imagePullPolicy : "Always"    # Image pull policy for deployed functions
+  httpProbe: false               # Setting to true will use HTTP for readiness and liveness probe on Pods (incompatible with Istio < 1.1.5)
   setNonRootUser: false
   readinessProbe:
     initialDelaySeconds: 2
@@ -105,9 +100,16 @@ faasnetes:
       memory: "120Mi"
       cpu: "50m"
 
+# faasnetes:
+#   image: clouderizer/faas-netes:mar18    #mar18
+#   httpProbe: false
+#   imagePullPolicy: Always
+#   readTimeout: 70m
+#   writeTimeout: 70m
+
 # replaces faas-netes with openfaas-operator
 operator:
-  image: ghcr.io/openfaas/faas-netes:0.13.5
+  image: ghcr.io/openfaas/faas-netes:0.12.8
   create: false
   # set this to false when creating multiple releases in the same cluster
   # must be true for the first one only
@@ -118,23 +120,25 @@ operator:
       cpu: "50m"
 
 queueWorker:
-  image: ghcr.io/openfaas/queue-worker:0.12.2
+  image: clouderizer/openfaas-queue-worker:opensource  #mar4
   # Control HA of queue-worker
   replicas: 1
   # Control the concurrent invocations
-  maxInflight: 1
+  maxInflight: 5
   gatewayInvoke: true
   queueGroup: "faas"
-  ackWait: "60s"
+  ackWait : 70m
+  baseurl: "https://opensource.clouderizer.com"
   resources:
     requests:
       memory: "120Mi"
       cpu: "50m"
-# Requires openfaas PRO subscription
-  maxRetryAttempts: "10"
-  maxRetryWait: "120s"
-  initialRetryWait: "10s"
-  httpRetryCodes: "429,502,500,504,408"
+
+# queueWorker:
+#   image: clouderizer/openfaas-queue-worker:mar4
+#   ackWait: 70m
+#   maxInflight: 5
+#   replicas: 1
 
 # monitoring and auto-scaling components
 # both components
@@ -144,7 +148,6 @@ prometheus:
   resources:
     requests:
       memory: "512Mi"
-  annotations: {}
 
 alertmanager:
   image: prom/alertmanager:v0.18.0
@@ -163,45 +166,75 @@ nats:
     enabled: false
     host: ""
     port: ""
-  image: nats-streaming:0.22.0
+  image: nats-streaming:0.17.0
   enableMonitoring: false
   metrics:
-    # Should stay off by default because the exporter is not multi-arch (yet)
     enabled: false
-    image: synadia/prometheus-nats-exporter:0.6.2
+    image: synadia/prometheus-nats-exporter:0.6.2 
   resources:
     requests:
       memory: "120Mi"
 
 # ingress configuration
-ingress:
-  enabled: false
-  ## For k8s >= 1.18 you need to specify the pathType
-  ## See https://kubernetes.io/blog/2020/04/02/improvements-to-the-ingress-api-in-kubernetes-1.18/#better-path-matching-with-path-types
-  #pathType: ImplementationSpecific
+# ingress:
+#   enabled: false
+#   # Used to create Ingress record (should be used with exposeServices: false).
+#   hosts:
+#     - host: gateway.openfaas.local  # Replace with gateway.example.com if public-facing
+#       serviceName: gateway
+#       servicePort: 8080
+#       path: /
+#   annotations:
+#     kubernetes.io/ingress.class: nginx
+#   tls:
+#     # Secrets must be manually created in the namespace.
 
-  # Used to create Ingress record (should be used with exposeServices: false).
-  hosts:
-    - host: gateway.openfaas.local  # Replace with gateway.example.com if public-facing
-      serviceName: gateway
-      servicePort: 8080
-      path: /
+
+ingress:
   annotations:
+    cert-manager.io/issuer: letsencrypt-prod
     kubernetes.io/ingress.class: nginx
+  enabled: true
+  hosts:
+  - host: test.serverless.clouderizer.com
+    path: /
+    serviceName: gateway
+    servicePort: 8080
   tls:
-  # Secrets must be manually created in the namespace.
+  - hosts:
+    - test.serverless.clouderizer.com
+    secretName: openfaas-crt
 
 # ingressOperator (optional) – component to have specific FQDN and TLS for Functions
 # https://github.com/openfaas-incubator/ingress-operator
 ingressOperator:
-  image: ghcr.io/openfaas/ingress-operator:0.6.7
+  image: openfaas/ingress-operator:0.6.6
   replicas: 1
-  create: false
+  create: true
   resources:
     requests:
       memory: "25Mi"
 
-nodeSelector: {}
+# faas-idler configuration
+faasIdler:
+  image: clouderizer/faas-idler:opensource
+  replicas: 1
+  create: true
+  inactivityDuration: 2m               # If a function is inactive for 15 minutes, it may be scaled to zero
+  reconcileInterval: 3m                # The interval between each attempt to scale functions to zero
+  dryRun: false                        # Set to false to enable the idler to apply changes and scale to zero
+  resources:
+    requests:
+      memory: "64Mi"
+
+# faasIdler:
+#   image: clouderizer/faas-idler:latest1
+#   dryRun: false
+#   inactivityDuration: 2m               # If a function is inactive for 2 minutes, it may be scaled to zero
+#   reconcileInterval: 3m 
+
+nodeSelector:
+  beta.kubernetes.io/arch: amd64
 
 tolerations: []
 
@@ -211,8 +244,3 @@ kubernetesDNSDomain: cluster.local
 
 istio:
   mtls: false
-
-gatewayExternal:
-  annotations: {}
-
-k8sVersionOverride: "" #  Allow kubeVersion to be overridden for the ingress creation

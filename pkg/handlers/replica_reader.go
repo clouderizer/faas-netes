@@ -50,7 +50,7 @@ func MakeReplicaReader(defaultNamespace string, lister v1.DeploymentLister) http
 		}
 
 		d := time.Since(s)
-		log.Printf("Replicas: %s.%s, (%d/%d) %dms\n", functionName, lookupNamespace, function.AvailableReplicas, function.Replicas, d.Milliseconds())
+		log.Printf("Replicas: %s.%s, (%d/%d) %dms reason, %s\n", functionName, lookupNamespace, function.AvailableReplicas, function.Replicas, d.Milliseconds(),function.FirstReason, function.LastReason)
 
 		functionBytes, err := json.Marshal(function)
 		if err != nil {

@@ -84,6 +84,8 @@ spec:
         - name: logs_provider_url
           value: "{{ .Values.gateway.logsProviderURL }}"
         {{- end }}
+        - name: serverlessurl
+          value: "{{ .Values.gateway.serverlessurl }}"
         - name: read_timeout
           value: "{{ .Values.gateway.readTimeout }}"
         - name: write_timeout

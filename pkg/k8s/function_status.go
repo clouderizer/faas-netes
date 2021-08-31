@@ -28,6 +28,8 @@ func AsFunctionStatus(item appsv1.Deployment) *types.FunctionStatus {
 		Image:             functionContainer.Image,
 		AvailableReplicas: uint64(item.Status.AvailableReplicas),
 		InvocationCount:   0,
+		FirstReason: item.Status.Conditions[0].Reason,
+		LastReason: item.Status.Conditions[len(item.Status.Conditions)-1].Reason,
 		Labels:            &labels,
 		Annotations:       &item.Spec.Template.Annotations,
 		Namespace:         item.Namespace,

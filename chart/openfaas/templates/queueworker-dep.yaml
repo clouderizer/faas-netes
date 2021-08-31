@@ -76,6 +76,8 @@ spec:
           value: "/var/secrets"
         - name: basic_auth
           value: "{{ .Values.basic_auth }}"
+        - name: baseurl
+          value: "{{ .Values.queueWorker.baseurl }}"
         volumeMounts:
         - name: auth
           readOnly: true

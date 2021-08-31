@@ -52,7 +52,9 @@ spec:
           name: prometheus-config
           subPath: alert.rules.yml
         - mountPath: /prometheus/data
-          name: prom-data
+          name: pvc-prom-storage
+      securityContext:
+        fsGroup: 2000
       volumes:
         - name: prometheus-config
           configMap:
@@ -64,5 +66,6 @@ spec:
               - key: alert.rules.yml
                 path: alert.rules.yml
                 mode: 0644
-        - name: prom-data
-          emptyDir: {}
+        - name: pvc-prom-storage
+          persistentVolumeClaim:
+            claimName : pvc-prom

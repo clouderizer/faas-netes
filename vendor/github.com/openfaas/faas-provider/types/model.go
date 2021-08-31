@@ -80,6 +80,9 @@ type FunctionStatus struct {
 	// Namespace for the function, if supported by the faas-provider
 	Namespace string `json:"namespace,omitempty"`
 
+	FirstReason string `json:"firstReason,omitempty"`
+
+	LastReason string `json:"lastReason,omitempty"`
 	// EnvProcess overrides the fprocess environment variable and can be used
 	// with the watchdog
 	EnvProcess string `json:"envProcess,omitempty"`

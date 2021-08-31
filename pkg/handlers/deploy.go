@@ -245,6 +245,94 @@ func makeDeploymentSpec(request types.FunctionDeployment, existingSecrets map[st
 		},
 	}
 
+	if val, ok := annotations["prometheus_labels"]; ok {
+		if (val == "gpu") {
+
+			deploymentSpec = &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        request.Service,
+					Annotations: annotations,
+					Labels: map[string]string{
+						"faas_function": request.Service,
+					},
+				},
+				Spec: appsv1.DeploymentSpec{
+					Selector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"faas_function": request.Service,
+						},
+					},
+					Replicas: initialReplicas,
+					Strategy: appsv1.DeploymentStrategy{
+						Type: appsv1.RollingUpdateDeploymentStrategyType,
+						RollingUpdate: &appsv1.RollingUpdateDeployment{
+							MaxUnavailable: &intstr.IntOrString{
+								Type:   intstr.Int,
+								IntVal: int32(0),
+							},
+							MaxSurge: &intstr.IntOrString{
+								Type:   intstr.Int,
+								IntVal: int32(1),
+							},
+						},
+					},
+					RevisionHistoryLimit: int32p(10),
+					Template: apiv1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:        request.Service,
+							Labels:      labels,
+							Annotations: annotations,
+						},
+						Spec: apiv1.PodSpec{
+							NodeSelector: nodeSelector,
+							Containers: []apiv1.Container{
+								{
+									Name:  request.Service,
+									Image: request.Image,
+									Ports: []apiv1.ContainerPort{
+										{
+											Name:          "http",
+											ContainerPort: factory.Config.RuntimeHTTPPort,
+											Protocol:      corev1.ProtocolTCP,
+										},
+									},
+									Env:             envVars,
+									Resources:       *resources,
+									ImagePullPolicy: imagePullPolicy,
+									LivenessProbe:   probes.Liveness,
+									ReadinessProbe:  probes.Readiness,
+									SecurityContext: &corev1.SecurityContext{
+										ReadOnlyRootFilesystem: &request.ReadOnlyRootFilesystem,
+									},
+									VolumeMounts: []apiv1.VolumeMount{
+										{
+											Name: "shm",
+											MountPath: "/dev/shm",
+										},
+									},
+								},
+							},
+							Volumes: []apiv1.Volume{
+								{
+									Name: "shm",
+									EmptyDir:  &apiv1.EmptyDirVolumeSource{
+										Medium: "Memory",
+									},
+								},
+							},
+							ServiceAccountName: serviceAccount,
+							RestartPolicy:      corev1.RestartPolicyAlways,
+							DNSPolicy:          corev1.DNSClusterFirst,
+							// EnableServiceLinks injects ENV vars about every other service within
+							// the namespace.
+							EnableServiceLinks: &enableServiceLinks,
+						},
+					},
+				},
+			}
+		}
+	}
+
 	factory.ConfigureReadOnlyRootFilesystem(request, deploymentSpec)
 	factory.ConfigureContainerUserID(deploymentSpec)
 
@@ -313,6 +401,23 @@ func buildEnvVars(request *types.FunctionDeployment) []corev1.EnvVar {
 	}
 
 	for k, v := range request.EnvVars {
+		items := []string{"NODE_ENV","OPENFAAS_URL","read_timeout", "write_timeout", "exec_timeout", "company", "server_url", "servingproject", "fn_model_path", "fn_preprocess_script_path", "fn_postprocess_script_path", "fn_predict_script_path", "fn_s3_otherfiles_path", "fn_otherfiles_path"}
+		_, found := Find(items, k)
+		if !found {
+			actualkey := "14189dc35ae35e75ff31d7502e245cd9bc7803838fbfd5c143cdcd79b8a28bbd"
+			v1 := decrypt(actualkey, v)
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  k,
+				Value: v1,
+			})
+
+		} else {
+			envVars = append(envVars, corev1.EnvVar{
+				Name:  k,
+				Value: v,
+			})
+		}
+
 		envVars = append(envVars, corev1.EnvVar{
 			Name:  k,
 			Value: v,
@@ -324,6 +429,32 @@ func buildEnvVars(request *types.FunctionDeployment) []corev1.EnvVar {
 	})
 
 	return envVars
+}
+
+func decrypt(keyString string, data string) (decryptedString string) {
+
+	iv := []byte("AAAAAAAAAAAAAAAA")
+	key, _ := hex.DecodeString(keyString)
+	block, _ := aes.NewCipher(key)	
+	decoded, err := base64.StdEncoding.DecodeString(data)
+	if err != nil {
+		panic(err)
+	}
+	mode := cipher.NewCBCDecrypter(block, iv)
+	mode.CryptBlocks(decoded, decoded)
+	if err != nil {
+		panic(err)
+	}
+	return string(decoded)
+
+
+func Find(slice []string, val string) (int, bool) {
+    for i, item := range slice {
+        if item == val {
+            return i, true
+        }
+    }
+    return -1, false
 }
 
 func int32p(i int32) *int32 {
